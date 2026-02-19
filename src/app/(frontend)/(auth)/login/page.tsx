@@ -20,12 +20,13 @@ import { Dumbbell, Mail, Lock, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/Toaster'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { loginUser } from '@/services/client/user.client'
 
 export default function LoginPage() {
     const { theme, isDark } = useAppTheme()
     const router = useRouter()
+    const queryClient = useQueryClient()
 
     const form = useForm({
         initialValues: {
@@ -41,15 +42,19 @@ export default function LoginPage() {
     const { mutate: loginMutation, isPending } = useMutation({
         mutationFn: loginUser,
         onSuccess: (result) => {
-            if (result.success) {
-                console.log('Login successful:', result.data)
-                toast.success('Logged in successfully!')
-                console.log('User role:', `/${result.data.user.role}`)
-                router.push(`/${result.data.user.role}`)
-                router.refresh()
-            } else {
+            if (!result.success) {
                 toast.error(result.error || 'Login failed')
+                return
             }
+
+            // hydrate auth cache immediately (prevents race condition)
+            queryClient.setQueryData(['currentUser'], {
+                success: true,
+                data: { user: result.data.user },
+            })
+
+            toast.success('Logged in successfully!')
+            router.replace(`/${result.data.user.role}`)
         },
         onError: (error: any) => {
             toast.error(error.message || 'Login failed')

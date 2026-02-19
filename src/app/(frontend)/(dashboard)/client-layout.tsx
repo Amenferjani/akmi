@@ -15,41 +15,39 @@ import { DashboardSidebar } from '@/components/shared/sideBar'
 // }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const { user, isLoading , isFetching } = useAuth()
+    const { user, authState } = useAuth()
     const router = useRouter()
     const pathname = usePathname()
     const { theme } = useAppTheme()
     const [isAuthorized, setIsAuthorized] = useState(false)
     const [opened, { toggle }] = useDisclosure()
-    // const [collapsed, setCollapsed] = useState(false)
 
     useEffect(() => {
-        if (isLoading || isFetching) return
-
-        // Check if user is authorized for this dashboard section
-        const isAthleteRoute = pathname.startsWith('/athlete')
-        const isCoachRoute = pathname.startsWith('/coach')
+        if (authState === 'loading') return
 
         if (!user) {
-            router.push('/login')
+            router.replace('/login')
             return
         }
 
-        // Role-based access
+        const isAthleteRoute = pathname.startsWith('/athlete')
+        const isCoachRoute = pathname.startsWith('/coach')
+
         if (isAthleteRoute && user.role !== 'athlete') {
-            router.push(`/${user.role}`)
+            router.replace(`/${user.role}`)
             return
         }
 
         if (isCoachRoute && user.role !== 'coach') {
-            router.push(`/${user.role}`)
+            router.replace(`/${user.role}`)
             return
         }
 
         setIsAuthorized(true)
-    }, [user, isLoading, pathname, router])
+    }, [authState, user, pathname, router])
 
-    if (isLoading || !isAuthorized) {
+
+    if (authState === 'loading' || !isAuthorized){
         return (
             <Box
                 style={{
@@ -91,8 +89,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}
                 >
                     <DashboardSidebar
-                        // collapsed={collapsed}
-                        // onToggle={() => setCollapsed(!collapsed)}
+                    // collapsed={collapsed}
+                    // onToggle={() => setCollapsed(!collapsed)}
                     />
                 </AppShell.Navbar>
 

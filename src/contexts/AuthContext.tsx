@@ -1,33 +1,25 @@
 'use client'
 
-import { createContext, useContext, useEffect } from 'react'
+import { createContext, useContext, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, usePathname } from 'next/navigation'
 import { User } from 'payload'
 import { getMe, logoutUser, refreshToken } from '@/services/client/user.client'
-import { Box, Loader } from '@mantine/core'
-import { useAppTheme } from '@/hooks/useAppTheme'
+
+type AuthState = 'loading' | 'authenticated' | 'guest'
 
 type AuthContextType = {
     user: User | null
+    authState: AuthState
     isLoading: boolean
-    isFetching: boolean
     refetchUser: () => void
     logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = [
-    '/login',
-    '/signup',
-    '/verify',
-    '/verify-notice',
-    '/', // landing page
-]
+const PUBLIC_ROUTES = ['/login', '/signup', '/verify', '/verify-notice', '/']
 
-// Role-specific dashboard routes
 const ROLE_DASHBOARD_MAP = {
     athlete: '/athlete',
     coach: '/coach',
@@ -42,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: response,
         isLoading,
         isFetching,
+        isSuccess,
         refetch,
     } = useQuery({
         queryKey: ['currentUser'],
@@ -50,75 +43,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         retry: false,
     })
 
-    const user = response?.success ? response.data?.user : null
-    const isAuthenticated = !!user
+    /**
+     * IMPORTANT:
+     * We must distinguish:
+     * - loading (don't know yet)
+     * - guest (know there is no user)
+     * - authenticated
+     */
+    const user = response?.success ? (response.data?.user ?? null) : null
 
-    // Auto refresh token
+    const authState: AuthState = useMemo(() => {
+        if (!isSuccess) return 'loading'
+        if (user) return 'authenticated'
+        return 'guest'
+    }, [isSuccess, user])
+
+    /**
+     * Silent token refresh (only when authenticated)
+     */
     useEffect(() => {
-        let refreshTimer: NodeJS.Timeout
+        if (authState !== 'authenticated') return
 
+        const timer = setInterval(
+            () => {
+                refreshToken()
+            },
+            10 * 60 * 1000,
+        )
 
-        if (isAuthenticated) {
-            refreshTimer = setInterval(refreshToken, 10 * 60 * 1000)
-        }
+        return () => clearInterval(timer)
+    }, [authState])
 
-        return () => clearInterval(refreshTimer)
-    }, [isAuthenticated, refetch])
-
-    // Route protection and redirects
+    /**
+     * Route Protection — runs ONLY after auth resolved
+     */
     useEffect(() => {
-        if (isLoading || isFetching) return
+        if (authState === 'loading') return
 
         const isPublicRoute = PUBLIC_ROUTES.some(
             (route) => pathname === route || pathname.startsWith(`${route}/`),
         )
 
-        // Not authenticated and trying to access protected route -> redirect to login
-        if (!isAuthenticated && !isPublicRoute) {
-            router.push('/login')
+        // ❌ Guest trying to access protected route
+        if (authState === 'guest' && !isPublicRoute) {
+            router.replace('/login')
             return
         }
 
-        // Authenticated and trying to access auth routes -> redirect to appropriate dashboard
-        if (isAuthenticated && isPublicRoute && pathname !== '/') {
+        // ✅ Logged in visiting auth pages
+        if (authState === 'authenticated' && isPublicRoute && pathname !== '/') {
             const dashboardPath =
-                ROLE_DASHBOARD_MAP[user?.role as keyof typeof ROLE_DASHBOARD_MAP] || '/athlete'
-            router.push(dashboardPath)
+                ROLE_DASHBOARD_MAP[user!.role as keyof typeof ROLE_DASHBOARD_MAP] || '/athlete'
+
+            router.replace(dashboardPath)
             return
         }
 
-        // Role-based route protection
-        if (isAuthenticated && user) {
-            // Protect coach routes
+        // ✅ Role protection
+        if (authState === 'authenticated' && user) {
             if (pathname.startsWith('/coach') && user.role !== 'coach') {
-                router.push('/athlete')
+                router.replace('/athlete')
                 return
             }
 
-            // Protect athlete routes
             if (pathname.startsWith('/athlete') && user.role !== 'athlete') {
-                router.push('/coach')
+                router.replace('/coach')
                 return
             }
         }
-    }, [user, isLoading, pathname, router])
+    }, [authState, pathname, router, user])
 
     const logout = async () => {
         await logoutUser()
         queryClient.setQueryData(['currentUser'], null)
-        router.push('/login')
+        router.replace('/login')
     }
 
-    const { theme } = useAppTheme()
     return (
-        <AuthContext.Provider value={{ user, isFetching ,isLoading, refetchUser: refetch, logout }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                authState,
+                isLoading: isLoading || isFetching,
+                refetchUser: refetch,
+                logout,
+            }}
+        >
             {children}
         </AuthContext.Provider>
     )
 }
 
 export const useAuth = () => {
-    const context = useContext(AuthContext)
-    if (!context) throw new Error('useAuth must be used within AuthProvider')
-    return context
+    const ctx = useContext(AuthContext)
+    if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+    return ctx
 }
