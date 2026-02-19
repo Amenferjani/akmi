@@ -15,7 +15,7 @@ import { DashboardSidebar } from '@/components/shared/sideBar'
 // }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const { user, isLoading } = useAuth()
+    const { user, isLoading , isFetching } = useAuth()
     const router = useRouter()
     const pathname = usePathname()
     const { theme } = useAppTheme()
@@ -24,7 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // const [collapsed, setCollapsed] = useState(false)
 
     useEffect(() => {
-        if (isLoading) return
+        if (isLoading || isFetching) return
 
         // Check if user is authorized for this dashboard section
         const isAthleteRoute = pathname.startsWith('/athlete')

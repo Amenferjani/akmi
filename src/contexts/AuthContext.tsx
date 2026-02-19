@@ -11,6 +11,7 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 type AuthContextType = {
     user: User | null
     isLoading: boolean
+    isFetching: boolean
     refetchUser: () => void
     logout: () => Promise<void>
 }
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
         data: response,
         isLoading,
+        isFetching,
         refetch,
     } = useQuery({
         queryKey: ['currentUser'],
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Route protection and redirects
     useEffect(() => {
-        if (isLoading) return
+        if (isLoading || isFetching) return
 
         const isPublicRoute = PUBLIC_ROUTES.some(
             (route) => pathname === route || pathname.startsWith(`${route}/`),
@@ -109,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { theme } = useAppTheme()
     return (
-        <AuthContext.Provider value={{ user, isLoading, refetchUser: refetch, logout }}>
+        <AuthContext.Provider value={{ user, isFetching ,isLoading, refetchUser: refetch, logout }}>
             {children}
         </AuthContext.Provider>
     )
