@@ -12,6 +12,9 @@ const nextConfig = {
 
     return webpackConfig
   },
+  experimental: {
+    optimizePackageImports: ['@mantine/core', '@mantine/hooks'],
+  },
 }
 
 export default withPayload(nextConfig, { devBundleServerPackages: false })

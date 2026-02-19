@@ -68,7 +68,10 @@ export interface Config {
   blocks: {};
   collections: {
     users: User;
+    'coach-athlete': CoachAthlete;
     media: Media;
+    exercises: Exercise;
+    workouts: Workout;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -77,14 +80,17 @@ export interface Config {
   collectionsJoins: {};
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
+    'coach-athlete': CoachAthleteSelect<false> | CoachAthleteSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    exercises: ExercisesSelect<false> | ExercisesSelect<true>;
+    workouts: WorkoutsSelect<false> | WorkoutsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
   };
   db: {
-    defaultIDType: string;
+    defaultIDType: number;
   };
   fallbackLocale: null;
   globals: {};
@@ -119,7 +125,55 @@ export interface UserAuthOperations {
  * via the `definition` "users".
  */
 export interface User {
-  id: string;
+  id: number;
+  role: 'athlete' | 'coach' | 'admin';
+  profile: {
+    firstName: string;
+    lastName: string;
+    age: 'Under 18' | '18-24' | '25-34' | '35-44' | '45-54' | '55+';
+    bio?: string | null;
+    profilePhoto?: (number | null) | Media;
+  };
+  preferences: {
+    unitSystem: 'metric' | 'imperial';
+  };
+  athleteData?: {
+    weightClass?: string | null;
+    experienceLevel?: ('beginner' | 'intermediate' | 'advanced') | null;
+    currentPRs?: {
+      squat?: number | null;
+      bench?: number | null;
+      deadlift?: number | null;
+    };
+    goals?: string | null;
+  };
+  coachData?: {
+    specialization?: ('powerlifting' | 'strength' | 'general' | 'bodybuilding') | null;
+    certifications?:
+      | {
+          name: string;
+          issuingOrganization?: string | null;
+          yearObtained?: number | null;
+          certificateFile?: (number | null) | Media;
+          id?: string | null;
+        }[]
+      | null;
+    yearsOfExperience?: number | null;
+    price?: number | null;
+    /**
+     * Extended bio for coach profile
+     */
+    bio?: string | null;
+  };
+  subscription: {
+    tier: 'free' | 'pro' | 'elite';
+    /**
+     * Stripe customer ID for subscription management
+     */
+    stripeCustomerId?: string | null;
+    subscriptionEndDate?: string | null;
+    autoRenew?: boolean | null;
+  };
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -127,6 +181,8 @@ export interface User {
   resetPasswordExpiration?: string | null;
   salt?: string | null;
   hash?: string | null;
+  _verified?: boolean | null;
+  _verificationToken?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
   sessions?:
@@ -144,7 +200,7 @@ export interface User {
  * via the `definition` "media".
  */
 export interface Media {
-  id: string;
+  id: number;
   alt: string;
   updatedAt: string;
   createdAt: string;
@@ -160,10 +216,84 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "coach-athlete".
+ */
+export interface CoachAthlete {
+  id: number;
+  coach: number | User;
+  athlete: number | User;
+  status?: ('pending' | 'active' | 'ended') | null;
+  startDate?: string | null;
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "exercises".
+ */
+export interface Exercise {
+  id: number;
+  name: string;
+  muscleGroup: 'Chest' | 'Back' | 'Legs' | 'Shoulders' | 'Arms' | 'Core' | 'Full Body';
+  equipment: 'Barbell' | 'Dumbbell' | 'Machine' | 'Cable' | 'Bodyweight' | 'Other';
+  instructions?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * YouTube or Vimeo link to exercise demonstration
+   */
+  demoVideoUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workouts".
+ */
+export interface Workout {
+  id: number;
+  user: number | User;
+  date: string;
+  exercises: {
+    exercise: number | Exercise;
+    sets?:
+      | {
+          weight: number;
+          reps: number;
+          rpe?: number | null;
+          id?: string | null;
+        }[]
+      | null;
+    notes?: string | null;
+    id?: string | null;
+  }[];
+  /**
+   * Auto-calculated from sets
+   */
+  totalVolume?: number | null;
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
-  id: string;
+  id: number;
   key: string;
   data:
     | {
@@ -180,20 +310,32 @@ export interface PayloadKv {
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
-  id: string;
+  id: number;
   document?:
     | ({
         relationTo: 'users';
-        value: string | User;
+        value: number | User;
+      } | null)
+    | ({
+        relationTo: 'coach-athlete';
+        value: number | CoachAthlete;
       } | null)
     | ({
         relationTo: 'media';
-        value: string | Media;
+        value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'exercises';
+        value: number | Exercise;
+      } | null)
+    | ({
+        relationTo: 'workouts';
+        value: number | Workout;
       } | null);
   globalSlug?: string | null;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   updatedAt: string;
   createdAt: string;
@@ -203,10 +345,10 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: string;
+  id: number;
   user: {
     relationTo: 'users';
-    value: string | User;
+    value: number | User;
   };
   key?: string | null;
   value?:
@@ -226,7 +368,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: string;
+  id: number;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -237,6 +379,60 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  role?: T;
+  profile?:
+    | T
+    | {
+        firstName?: T;
+        lastName?: T;
+        age?: T;
+        bio?: T;
+        profilePhoto?: T;
+      };
+  preferences?:
+    | T
+    | {
+        unitSystem?: T;
+      };
+  athleteData?:
+    | T
+    | {
+        weightClass?: T;
+        experienceLevel?: T;
+        currentPRs?:
+          | T
+          | {
+              squat?: T;
+              bench?: T;
+              deadlift?: T;
+            };
+        goals?: T;
+      };
+  coachData?:
+    | T
+    | {
+        specialization?: T;
+        certifications?:
+          | T
+          | {
+              name?: T;
+              issuingOrganization?: T;
+              yearObtained?: T;
+              certificateFile?: T;
+              id?: T;
+            };
+        yearsOfExperience?: T;
+        price?: T;
+        bio?: T;
+      };
+  subscription?:
+    | T
+    | {
+        tier?: T;
+        stripeCustomerId?: T;
+        subscriptionEndDate?: T;
+        autoRenew?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -244,6 +440,8 @@ export interface UsersSelect<T extends boolean = true> {
   resetPasswordExpiration?: T;
   salt?: T;
   hash?: T;
+  _verified?: T;
+  _verificationToken?: T;
   loginAttempts?: T;
   lockUntil?: T;
   sessions?:
@@ -253,6 +451,19 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "coach-athlete_select".
+ */
+export interface CoachAthleteSelect<T extends boolean = true> {
+  coach?: T;
+  athlete?: T;
+  status?: T;
+  startDate?: T;
+  notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -271,6 +482,46 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "exercises_select".
+ */
+export interface ExercisesSelect<T extends boolean = true> {
+  name?: T;
+  muscleGroup?: T;
+  equipment?: T;
+  instructions?: T;
+  demoVideoUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workouts_select".
+ */
+export interface WorkoutsSelect<T extends boolean = true> {
+  user?: T;
+  date?: T;
+  exercises?:
+    | T
+    | {
+        exercise?: T;
+        sets?:
+          | T
+          | {
+              weight?: T;
+              reps?: T;
+              rpe?: T;
+              id?: T;
+            };
+        notes?: T;
+        id?: T;
+      };
+  totalVolume?: T;
+  notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
