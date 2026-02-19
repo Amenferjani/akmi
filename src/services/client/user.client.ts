@@ -41,6 +41,7 @@ export const getMe = async () => {
 export const logoutUser = async () => {
     try {
         const response = await api.post('/users/logout')
+        console.log('📦 Logout response:', response.data)
         return { success: true, data: response.data }
     } catch (error) {
         return {
